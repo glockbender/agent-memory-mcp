@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Index directories explicitly configured through symbolic links, preserving document paths and exclusions. Replacing a directory with a link no longer silently removes its indexed documents.
+- Indexing preserves existing documents when a configured source is missing or unreadable, or a scan fails. Restore unavailable sources, or remove intentionally deleted sources from `MCP_INDEX_DIRS`.
 
 ## [0.17.0] - 2026-11-14
 
