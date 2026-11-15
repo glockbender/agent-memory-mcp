@@ -56,3 +56,56 @@ database files and corpus copies are removed, then the empty temporary directory
 tree is moved to macOS Trash. If owned files reach 1 GB, removal stops for manual
 confirmation and the summary reports their location and size. The input binary
 and retained output files are not removed by the test.
+
+## Audit the baseline before changing ranking
+
+Run the model-free integrity and evidence audit separately:
+
+```sh
+python3 -B scripts/test_audit_search_baseline.py
+python3 scripts/audit-search-baseline.py \
+  --dataset-dir /path/to/frozen-trial \
+  --source-root /path/to/source-repository \
+  --judgments /path/to/judgments.json \
+  --output /path/to/audit.json
+```
+
+The audit checks all six historical methods, paired questions, source hashes,
+actual ranks and published metrics. It replays every saved file-search query.
+Judgments list each need's evidence-backed `positive_sources` and separately
+grade its returned primary-source chunk. They are sparse positive labels and
+agent assessments, not exhaustive human ground truth. Keep historical
+single-source metrics alongside the audited metrics; a different useful source
+is not automatically a failure. Full-chunk judgments do not establish that the
+shorter delivered snippet contains the answer.
+
+## Trace and compare ranking on the live index
+
+Build the opt-in diagnostic test binary from this branch:
+
+```sh
+go test -tags=corpus -c -o /tmp/agent-memory-ranking-probe ./internal/rag
+```
+
+Add these flags to the live test command:
+
+```sh
+--compare-semantic \
+--ranking-probe /tmp/agent-memory-ranking-probe \
+--ranking-input /path/to/diagnostic-input.json
+```
+
+The input is an array of `id`, `language`, `query`, `accepted_sources` and `kind`
+objects. Empty accepted-source lists mark no-answer controls, which are retained
+but excluded from positive-source hit metrics. The probe holds native candidate
+budgets fixed while comparing ranking, then separately tests a larger semantic
+pool and removal of recency boosts. It records candidate ranks, scores and
+actual native search responses. The selected semantic mode must find an
+accepted source within five for each positive input. The probe skips when its
+explicit isolated configuration is absent.
+
+`--compare-semantic` also checks selection through the actual CLI configuration
+on all original questions. It writes `semantic.jsonl` and summary counts, then
+restores the default profile before the symlink checks. The diagnostic output
+includes private query vectors and source chunks; keep it with local research
+results. Models and temporary databases are removed as in the ordinary run.

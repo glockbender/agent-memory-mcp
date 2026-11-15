@@ -39,9 +39,17 @@ def main():
     parser.add_argument("--model", default="embeddinggemma:300m")
     parser.add_argument("--model-digest", default="85462619ee721b466c5927d109d4cb765861907d5417b9109caebc4e614679f1")
     parser.add_argument("--dimension", type=int, default=768)
+    parser.add_argument("--ranking-probe", type=Path)
+    parser.add_argument("--ranking-input", type=Path)
+    parser.add_argument("--compare-semantic", action="store_true")
     args = parser.parse_args()
     args.binary = args.binary.resolve(strict=True)
     args.source_root = args.source_root.resolve(strict=True)
+    require(bool(args.ranking_probe) == bool(args.ranking_input),
+            "Supply both --ranking-probe and --ranking-input")
+    if args.ranking_probe:
+        args.ranking_probe = args.ranking_probe.resolve(strict=True)
+        args.ranking_input = args.ranking_input.resolve(strict=True)
     manifest = json.loads(args.corpus_manifest.read_text())
     questions = json.loads(args.questions.read_text())["questions"]
     baseline = {}
@@ -180,6 +188,30 @@ def main():
         command("index")
         result["initial_state"] = state()
         ordinary = evaluate("ordinary")
+        if args.compare_semantic:
+            settings["MCP_RAG_FUSION"] = "semantic"
+            config.write_text("".join(f"{key}={value}\n" for key, value in settings.items()))
+            semantic_rows = evaluate("semantic")
+            result["semantic_comparison"] = {
+                "hit5": sum(row["primary_rank"] is not None for row in semantic_rows),
+                "hit1": sum(row["primary_rank"] == 1 for row in semantic_rows),
+                "queries": len(semantic_rows),
+            }
+            require(not [r for r in semantic_rows
+                         if baseline[(r["id"], r["language"])] and not r["primary_rank"]],
+                    "Semantic mode lost a baseline source hit")
+            settings.pop("MCP_RAG_FUSION")
+            config.write_text("".join(f"{key}={value}\n" for key, value in settings.items()))
+        if args.ranking_probe:
+            print("Tracing retrieval candidates and ranking profiles", flush=True)
+            probe_env = dict(env, RAG_DIAGNOSTIC_CONFIG=str(config),
+                             RAG_DIAGNOSTIC_INPUT=str(args.ranking_input),
+                             RAG_DIAGNOSTIC_OUTPUT=str(args.output_dir.resolve() / "ranking.jsonl"))
+            probe = subprocess.run([str(args.ranking_probe), "-test.run=^TestRankingDiagnostics$", "-test.v"],
+                                   cwd=temporary, env=probe_env, text=True,
+                                   capture_output=True, timeout=300)
+            (args.output_dir / "ranking-probe.log").write_text(probe.stdout + probe.stderr)
+            require(probe.returncode == 0, "Ranking probe failed; see ranking-probe.log")
         targets = temporary / "targets"
         targets.mkdir()
         for name in settings["MCP_INDEX_DIRS"].split(","):

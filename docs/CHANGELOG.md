@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Index directories explicitly configured through symbolic links, preserving document paths and exclusions. Replacing a directory with a link no longer silently removes its indexed documents.
 - Indexing preserves existing documents when a configured source is missing or unreadable, or a scan fails. Restore unavailable sources, or remove intentionally deleted sources from `MCP_INDEX_DIRS`.
+
 ### Added
 
 - Select a single Ollama embedding model with `OLLAMA_EMBEDDING_MODEL`; unset keeps the existing model fallback chain. Set its matching dimension and re-index when switching models.
+- Compare document search with `MCP_RAG_FUSION=semantic`: vector similarity without keyword or metadata boosts. Requires a vector index; the default hybrid ranking stays unchanged.
 
 ## [0.17.0] - 2026-11-14
 
